@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class G1{
+public class G2{
     public static void main(String[] args){
 
         //make sure there is a string in command line args
@@ -14,8 +14,8 @@ public class G1{
         }
         try{
             //generate tokenizer/parser objects
-            G1TokenManager tm = new G1TokenManager(args[0], true);
-            G1Parser p = new G1Parser(tm, true);
+            G2TokenManager tm = new G2TokenManager(args[0], true);
+            G2Parser p = new G2Parser(tm, true);
 
             //parse regular expresison string
             p.parse();
@@ -27,7 +27,7 @@ public class G1{
     }
 }
 
-class G1TokenManager implements G1Constants{
+class G2TokenManager implements G2Constants{
     public List<String> Generated_List = new ArrayList<>(); //This isn't really necessary, however it is great for visualizing the token types generated after parsing.
 	private boolean debug;
     private boolean at_end = false; //very important for detecting end of expression. Cannot rely on EOF or any characters for this context.
@@ -38,7 +38,7 @@ class G1TokenManager implements G1Constants{
 
 	// -----------------------------------------
 
-	public G1TokenManager(String expression, boolean debug) {
+	public G2TokenManager(String expression, boolean debug) {
 		this.inputLine = expression;
         this.debug = debug;
 		currentChar = expression.charAt(0);
@@ -165,14 +165,14 @@ class G1TokenManager implements G1Constants{
 	}
 }
 
-class G1Parser  implements G1Constants{
+class G2Parser  implements G2Constants{
     private boolean debug;
-    private G1TokenManager tm;
+    private G2TokenManager tm;
     private Token currentToken;
     private Token previousToken; // This will be important in the future maybe
 
     //-----------------------------------------
-    public G1Parser(G1TokenManager tm, boolean debug){
+    public G2Parser(G2TokenManager tm, boolean debug){
       this.tm = tm;
       this.debug = debug;
       currentToken = tm.getNextToken(); 
@@ -222,17 +222,17 @@ class G1Parser  implements G1Constants{
     *   
     *   program       -->     statementList                 {<CHAR>, <PERIOD>, <EORE>, <ERROR>, "(", ")", "|", "*", "\", "|"}
     *   statementList -->     expr                          {<CHAR>, <PERIOD>, "("}
-    *   expr          -->     term termList                 {<CHAR>, <PERIOD>, "("}
+    *   expr          -->     term termList                 {")", <EORE>}
     *   termList      -->     "|" term termList             {"|"}
-    *   termList      -->     lambda                        {<EORE>}
+    *   termList      -->     lambda                        {")", <EORE>}
     *   term          -->     factor factorList             {<CHAR>, <PERIOD>, "("}
     *   factorList    -->     factor factorList             {<CHAR>, <PERIOD>, "("}
-    *   factorList    -->     lambda                        {"|", <EORE>}
+    *   factorList    -->     lambda                        {"|", ")", <EORE>}
     *   factor        -->     <CHAR> factorTail             {<CHAR>}
     *   factor        -->     <PERIOD> factorTail           {<PERIOD>}
     *   factor        -->     "(" expr ")" factorTail       {"("}
     *   factorTail    -->     "*" factorTail                {"*"}
-    *   factorTail    -->     lambda                        {<CHAR>, <PERIOD>, "(", <EORE>}
+    *   factorTail    -->     lambda                        {<CHAR>, <PERIOD>, "(", <EORE>, ")", <EORE>}
     *
     *   This could code be cleaned up but whatever... sue me! I don't want to break anything.
     */
@@ -489,7 +489,7 @@ class Token {
 
   //This is the interface used in enforcing the structure of inputs that could occur in our regular expressions.
   //Inmcluded an indexed mapping for each token type as well.
-  interface G1Constants{
+  interface G2Constants{
     int EORE = 0;
     int CHAR = 1;
     int PERIOD = 2;
@@ -512,84 +512,76 @@ class Token {
     };
 }
 
+class NFAState implements G2Constants
+{
+  public NFAState arrow1;
+  public char label1;
+  public NFAState arrow2;      // arrow2 always lambda
+  public NFAState acceptState;
+  //-----------------------------------------
+  public NFAState()
+  {
+    arrow1 = arrow2 = acceptState = null;
+    label1 = 0;                // zero represents lambda
+  }
+  //-----------------------------------------
+  public static void displayNFA(NFAState startState)
+  {
+    ArrayList<NFAState> states = 
+                              new ArrayList<NFAState>();
+    NFAState s;
 
-/*Ignore this... this is an attempted refactor for the tokenizer steps
-switch(currentChar){
-            case '.':
-                Single_Char = true;
-                token.image =  "\".\"";
-                token.endColumn = currentColumnNumber;
-                token.kind = PERIOD;
-                Generated_List.add(".");
-                validated = true;
-            case '(':
-                Single_Char = true;
-                token.image =  "\"(\"";
-                token.endColumn = currentColumnNumber;
-                token.kind = LEFTPAREN;
-                Generated_List.add("(");
-                validated = true;
-            case ')':
-                Single_Char = true;
-                token.image =  "\")\"";
-                token.endColumn = currentColumnNumber;
-                token.kind = RIGHTPAREN;
-                Generated_List.add(")");
-                validated = true;
-            case '|':
-                Single_Char = true;
-                token.image =  "\"|\"";
-                token.endColumn = currentColumnNumber;
-                token.kind = OR;
-                Generated_List.add("|");
-                validated = true;
-            case '*':
-                Single_Char = true;
-                token.image =  "\"*\"";
-                token.endColumn = currentColumnNumber;
-                token.kind = STAR;
-                Generated_List.add("*");
-                validated = true;
-            case '\\':
-                Generated_List.add("\\");
-                getNextChar();
-                Generated_List.add("<CHAR>");
-                Single_Char = true;
-                token.image = "<CHAR>";
-                token.endColumn = currentColumnNumber-1;
-                token.kind = CHAR;
-                currentColumnNumber -= 1;
-                validated = true;
-        }
-        
-		if(currentColumnNumber >= inputLine.length() || at_end == true){
-            Single_Char = false;
-			token.image = "<EORE>";
-			token.endColumn = currentColumnNumber;
-			token.kind = EORE;
-            Generated_List.add("<EORE>");
-            validated = true;
-        }
+    // add all the states to ArrayList
+    states.add(startState);
+    for (int i = 0; i < states.size(); i++)
+    {
+      s = states.get(i);
+      if (s.arrow1 != null && !states.contains(s.arrow1))
+        states.add(s.arrow1);  
+      if (s.arrow2 != null && !states.contains(s.arrow2))
+        states.add(s.arrow2);  
+    }
 
-        //<CHAR>
-		else if (Character.isLetterOrDigit(currentChar)) {
-            if(debug) System.out.println(currentChar);
-            Single_Char = true;
-            token.image = "<CHAR>";
-            token.endColumn = currentColumnNumber;
-            token.kind = CHAR;
-            Generated_List.add("<CHAR>");
-            validated = true;
-		}
+    // display all the states in the ArrayList using
+    // index in the ArrayList as the state number
+    String arrow1 = null, arrow2 = null;
+    for (int i = 0; i < states.size(); i++)
+    {
+      s = states.get(i);
 
-        if(!validated){
-            Single_Char = false;
-            token.image =  "<ERROR>";
-            token.endColumn = currentColumnNumber;
-            token.kind = ERROR;
-        }
+      if (s.arrow1 == null)
+      {
+        arrow1 = "";
+      }
+      else
+      {
+        arrow1 = "" + states.indexOf(s.arrow1);
+        if (s.label1 == 0)
+          arrow1 = arrow1 + "/lambda";
+        else
+        if (s.label1 == PERIOD)
+          arrow1 = arrow1 + "/PERIOD";
+        else
+          arrow1 = arrow1 + "/" + 
+                           Character.toString(s.label1);
+      }
+                                         
+      if (s.arrow2 == null)
+        arrow2 = "";
+      else
+        arrow2 = "" + states.indexOf(s.arrow2) + 
+                                              "/lambda";
 
-        if(currentColumnNumber + 1 >= inputLine.length()){
-            at_end = true;
-        }
- */
+      if (i == 0)
+        System.out.printf(
+          "%3d: %-10s   %-10s    acceptState=%d%n",
+          i, arrow1, arrow2, 
+          states.indexOf(startState.acceptState));
+      else
+        System.out.printf(
+          "%3d: %-10s   %-10s%n",
+          i, arrow1, arrow2);
+    }      
+  }
+}
+
